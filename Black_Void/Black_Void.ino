@@ -111,7 +111,7 @@ bool nrChosenOpen = false;
 #define PW_MAX_LEN 63
 char pwBuffer[PW_MAX_LEN + 1] = "";
 int pwLen = 0;
-int pwCharIdx = 0;   // index into CHARSET for the currently highlighted char
+int pwCharIdx = 0; 
 
 const char* CHARSET =
   " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -483,7 +483,7 @@ void drawSpoofList() {
 }
 
 // ================================================================
-// drawResult 
+// drawResult — header bar + scroll hint bar + SEL=Save / BACK=Menu hint
 // ================================================================
 void drawResult() {
   oledClear();
@@ -499,6 +499,7 @@ void drawResult() {
 
   u8g2.setFont(u8g2_font_5x7_tf);
 
+  // Content area is between the 13px header and the 8px hint bar
   int maxLines = 6;
   int lineH   = 7;
   int startY  = 20;
@@ -532,7 +533,7 @@ void drawResult() {
 
 void drawMenu() {
   switch (currentMenu) {
-    case MENU_MAIN:       drawMenuList("TANK", mainItems, mainCount); break;
+    case MENU_MAIN:       drawMenuList("Black_Void", mainItems, mainCount); break;
     case MENU_WIFI:       drawMenuList("WIFI", wifiItems, wifiCount); break;
     case MENU_BLE_SCAN:   drawMenuList("BLE SCAN", bleItems, bleCount); break;
     case MENU_RF24:       drawMenuList("RF24", rf24Items, rf24Count); break;
@@ -604,7 +605,7 @@ void drawSplash() {
   delay(300);
 
   drawBootProgress("Init BLE...", 20);
-  NimBLEDevice::init("Tank");
+  NimBLEDevice::init("Black_Void");
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
   pBLEScan = nullptr;
   bleReady = true;
@@ -681,12 +682,12 @@ void initSD() {
   vspi.begin(SD_SCK, SD_MISO, SD_MOSI, NRF24_CSN);
   if (!SD.begin(SD_CS, vspi, 4000000)) { sdReady = false; return; }
   sdReady = true;
-  if (!SD.exists("/tank"))         SD.mkdir("/tank");
-  if (!SD.exists("/tank/wifi"))    SD.mkdir("/tank/wifi");
-  if (!SD.exists("/tank/ble"))     SD.mkdir("/tank/ble");
-  if (!SD.exists("/tank/rf24"))    SD.mkdir("/tank/rf24");
-  if (!SD.exists("/tank/probes"))  SD.mkdir("/tank/probes");
-  if (!SD.exists("/tank/spoof"))   SD.mkdir("/tank/spoof");
+  if (!SD.exists("/Black_Void"))         SD.mkdir("/Black_Void");
+  if (!SD.exists("/Black_Void/wifi"))    SD.mkdir("/Black_Void/wifi");
+  if (!SD.exists("/Black_Void/ble"))     SD.mkdir("/Black_Void/ble");
+  if (!SD.exists("/Black_Void/rf24"))    SD.mkdir("/Black_Void/rf24");
+  if (!SD.exists("/Black_Void/probes"))  SD.mkdir("/Black_Void/probes");
+  if (!SD.exists("/Black_Void/spoof"))   SD.mkdir("/Black_Void/spoof");
   loadSpoofProfiles();
 }
 
@@ -702,7 +703,7 @@ void saveToSD(String filename, String data) {
 void runSDBrowse() {
   sdFileCount = 0;
   sdFileSel   = 0;
-  const char* folders[] = {"/tank/wifi", "/tank/ble", "/tank/rf24", "/tank/probes", "/tank/spoof"};
+  const char* folders[] = {"/Black_Void/wifi", "/Black_Void/ble", "/Black_Void/rf24", "/Black_Void/probes", "/Black_Void/spoof"};
   for (int f = 0; f < 5; f++) {
     File dir = SD.open(folders[f]);
     if (!dir) continue;
@@ -928,7 +929,7 @@ void saveRF24() {
     }
     out += "\n";
   }
-  saveToSD("/tank/rf24/capture_" + getTimestamp() + ".txt", out);
+  saveToSD("/Black_Void/rf24/capture_" + getTimestamp() + ".txt", out);
   currentMenu = MENU_RESULT;
 }
 
@@ -1013,7 +1014,7 @@ void saveBLEScan() {
     if (bleDevices[i].isTracker) out += "Type: TRACKER (" + bleDevices[i].trackerType + ")\n";
     out += "---\n";
   }
-  saveToSD("/tank/ble/scan_" + getTimestamp() + ".txt", out);
+  saveToSD("/Black_Void/ble/scan_" + getTimestamp() + ".txt", out);
   currentMenu = MENU_RESULT;
 }
 
@@ -1411,7 +1412,7 @@ void saveWifiDevices() {
     out += "Ports: "  + String(nrDevices[i].ports)   + "\n";
     out += "---\n";
   }
-  saveToSD("/tank/wifi/devices_" + getTimestamp() + ".txt", out);
+  saveToSD("/Black_Void/wifi/devices_" + getTimestamp() + ".txt", out);
   showBigMessage("Saved!");
   delay(800);
   currentMenu = MENU_WIFI;
@@ -1544,7 +1545,7 @@ void saveProbes() {
     out += "RSSI: "    + String(probeRequests[i].rssi) + "dBm\n";
     out += "---\n";
   }
-  saveToSD("/tank/probes/probes_" + getTimestamp() + ".txt", out);
+  saveToSD("/Black_Void/probes/probes_" + getTimestamp() + ".txt", out);
   currentMenu = MENU_RESULT;
 }
 
@@ -1554,7 +1555,7 @@ void saveProbes() {
 void loadSpoofProfiles() {
   spoofProfileCount = 0;
   if (!sdReady) return;
-  File f = SD.open("/tank/spoof/profiles.txt", FILE_READ);
+  File f = SD.open("/Black_Void/spoof/profiles.txt", FILE_READ);
   if (!f) return;
   while (f.available() && spoofProfileCount < MAX_SPOOF_PROFILES) {
     String line = f.readStringUntil('\n');
@@ -1576,7 +1577,7 @@ void loadSpoofProfiles() {
 
 void saveSpoofProfiles() {
   if (!sdReady) return;
-  File f = SD.open("/tank/spoof/profiles.txt", FILE_WRITE);
+  File f = SD.open("/Black_Void/spoof/profiles.txt", FILE_WRITE);
   if (!f) return;
   for (int i = 0; i < spoofProfileCount; i++) {
     f.println(spoofProfiles[i].name + "|" + spoofProfiles[i].macAddress + "|" +
@@ -1664,7 +1665,7 @@ void drawStatusScreen() {
   resultOriginMenu = MENU_MAIN;
   resultContext    = CTX_NONE;
 
-  addResult("Tank");
+  addResult("Black_Void");
   addResult("----------------");
   addResult("nRF24: " + String(nrfReady ? "READY" : "FAIL"));
   addResult("BLE: "   + String(bleReady  ? "READY" : "FAIL"));
@@ -1792,7 +1793,7 @@ void handleSelect() {
         case CTX_BLE:   saveBLEScan();  break;
         case CTX_RF24:  saveRF24();     break;
         case CTX_PROBE: saveProbes();   break;
-        default: break;   // CTX_NONE: nothing to save
+        default: break;
       }
       break;
   }
@@ -1836,9 +1837,8 @@ void handleBack() {
       currentMenu = MENU_WIFI;
       menuIndex   = 0;
       break;
-    /* MENU_WIFI_PWENTRY is intentionally absent here — it handles its
-     own long-press-Back-to-cancel inside handlePasswordEntryButtons()
-     */
+    // MENU_WIFI_PWENTRY is intentionally absent here — it handles its
+    // own long-press-Back-to-cancel inside handlePasswordEntryButtons()
   }
 }
 
