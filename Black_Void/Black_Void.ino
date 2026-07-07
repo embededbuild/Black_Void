@@ -483,7 +483,7 @@ void drawSpoofList() {
 }
 
 // ================================================================
-// drawResult — header bar + scroll hint bar + SEL=Save / BACK=Menu hint
+// drawResult 
 // ================================================================
 void drawResult() {
   oledClear();
@@ -499,7 +499,6 @@ void drawResult() {
 
   u8g2.setFont(u8g2_font_5x7_tf);
 
-  // Content area is between the 13px header and the 8px hint bar
   int maxLines = 6;
   int lineH   = 7;
   int startY  = 20;
@@ -1021,9 +1020,6 @@ void saveBLEScan() {
 // ================================================================
 // WIFI SCAN + CONNECT + DEVICE DISCOVERY  (Corntenna functionality)
 // ================================================================
-
-// Re-assert button pullups after any esp_wifi/WiFi call — the radio
-// hardware transiently releases the GPIO mux on these pins.
 void reassertButtonPins() {
   pinMode(BTN_BACK,   INPUT_PULLUP);
   pinMode(BTN_UP,     INPUT_PULLUP);
@@ -1791,7 +1787,6 @@ void handleSelect() {
       }
       break;
 
-    // ── FIX: SELECT on result screen triggers the correct save ──
     case MENU_RESULT:
       switch (resultContext) {
         case CTX_BLE:   saveBLEScan();  break;
@@ -1828,7 +1823,6 @@ void handleBack() {
       currentMenu = MENU_SD;
       menuIndex   = 0;
       break;
-    // ── FIX: BACK returns to whichever menu launched this result ──
     case MENU_RESULT:
       currentMenu   = resultOriginMenu;
       menuIndex     = 0;
@@ -1842,8 +1836,9 @@ void handleBack() {
       currentMenu = MENU_WIFI;
       menuIndex   = 0;
       break;
-    // MENU_WIFI_PWENTRY is intentionally absent here — it handles its
-    // own long-press-Back-to-cancel inside handlePasswordEntryButtons()
+    /* MENU_WIFI_PWENTRY is intentionally absent here — it handles its
+     own long-press-Back-to-cancel inside handlePasswordEntryButtons()
+     */
   }
 }
 
@@ -1977,4 +1972,3 @@ void loop() {
 
   delay(20);
 }
-// to be continued
