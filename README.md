@@ -6,15 +6,20 @@
 
 ## Features
 
-| Module              | Capability                                                          |
-| ------------------- | -------------------------------------------------------------------- |
-| **Wi-Fi Scanner**    | Scans nearby access points; logs SSID, BSSID, channel, RSSI, encryption |
-| **BLE Scanner**      | Discovers advertising BLE devices and nearby beacons                 |
-| **RF Monitor**       | Passive 2.4 GHz activity observation via NRF24L01+                    |
-| **MAC Randomization**| Rotates the device's own Wi-Fi MAC to reduce persistent fingerprints  |
-| **SD Card Logging**  | Writes scan sessions to onboard storage for later review              |
-| **Spectrum Visualization** | On-screen representation of nearby RF activity                 |
-| **Status Screen**    | Live radio state, storage usage, and device health                    |
+| Module              | Capability                                                              |
+| -------------------- | -------------------------------------------------------------------------- |
+| **Wi-Fi Scanner**    | Scans nearby access points; logs SSID, BSSID, channel, RSSI, and encryption |
+| **Wi-Fi Connect**    | On-device password entry and association to a chosen network               |
+| **LAN Device Discovery** | Enumerates hosts on the connected subnet via ARP and probes common TCP ports |
+| **BLE Scanner**      | Discovers advertising BLE devices; flags known tracker beacon signatures (Apple, Tile, Samsung) |
+| **RF Spectrum Analyzer** | Sweeps all 125 NRF24 channels and reports packet activity per channel   |
+| **RF Packet Capture**| Records raw 2.4 GHz packets across the NRF24 channel range                 |
+| **RF Packet Replay** | Re-transmits a captured packet set back out on its original channels       |
+| **Probe Request Sniffer** | Passively captures 802.11 probe requests (client MAC + requested SSID) while channel-hopping |
+| **Device Profiles**  | Generates and stores locally-administered MAC/IP identity profiles to SD   |
+| **MAC Randomization**| Rotates the device's own Wi-Fi MAC address on boot and before scans/connections |
+| **SD Card Logging & Browser** | Persists all scan/capture output; on-device file browser, card info, delete |
+| **Status Screen**    | Live radio state, capture counts, and free heap                            |
 
 ---
 
@@ -25,7 +30,7 @@
 | Component           | Notes                       |
 | -------------------- | ---------------------------- |
 | ESP32 dev board       | Any standard 38-pin module   |
-| SSD1306 OLED 128×64   | I²C, connected on pins 21/22 |
+| SSD1306 OLED 128×64   | I²C, hardware I2C bus        |
 | NRF24L01+ module      | SPI, shares bus with SD card |
 | MicroSD card module   | Shares SPI bus with NRF24    |
 | Push buttons (x4)     | UP / DOWN / SELECT / BACK    |
@@ -51,7 +56,7 @@ BTN SELECT → GPIO 25
 BTN BACK   → GPIO 26
 ```
 
-> **Note:** The NRF24L01+ and SD card share the same SPI bus. The SD chip-select is held HIGH during NRF24 operations to prevent bus contention.
+> **Note:** The NRF24L01+ and SD card share the same SPI bus (VSPI). Button pin modes are re-asserted after any WiFi/esp_wifi call, since the radio driver transiently releases the GPIO mux on those pins.
 
 ---
 
@@ -66,6 +71,7 @@ RF24           — NRF24L01+ driver
 SD (built-in)  — SD card filesystem
 FS (built-in)  — ESP32 filesystem abstraction
 WiFi (built-in)— ESP32 Wi-Fi stack
+lwIP (built-in)— ARP table access for LAN device discovery
 ```
 
 ---
@@ -84,12 +90,18 @@ WiFi (built-in)— ESP32 Wi-Fi stack
 The firmware creates the following directory tree on first boot:
 
 ```
-/blackvoid/
-├── wifi/     — Wi-Fi scan results
-├── ble/      — BLE scan results
-├── rf/       — RF monitor logs
-└── system/   — Device and session metadata
+/tank/
+├── wifi/    — Wi-Fi scans and discovered LAN devices
+├── ble/     — BLE scan results
+├── rf24/    — RF24 spectrum, capture, and replay logs
+├── probes/  — Captured 802.11 probe requests
+└── spoof/   — Stored MAC/IP identity profiles
 ```
+
+> The `/tank/` path and internal BLE device name (`"Tank"`) are carried over from
+> an earlier codebase and haven't been renamed in this firmware yet. Update
+> `initSD()` and the `NimBLEDevice::init(...)` call if you want on-disk and
+> over-the-air naming to match Black Void.
 
 Log files are timestamped using device uptime (`HHhMMmSSs` format).
 
@@ -99,11 +111,14 @@ Log files are timestamped using device uptime (`HHhMMmSSs` format).
 
 ```
 [ UP ]    / [ DOWN ]  — scroll menu or results
-[ SELECT ]            — confirm / enter submenu / start action
+[ SELECT ]            — confirm / enter submenu / save result / start action
 [ BACK ]              — return to previous menu / stop active scan
 ```
 
-During an active scan, press `BACK` to stop and display results.
+On the password-entry screen: `UP`/`DOWN` cycle the character wheel, a short
+`SELECT` press appends the highlighted character, a long `SELECT` press (~600ms)
+connects, a short `BACK` press deletes a character, and a long `BACK` press
+cancels back to the network list.
 
 ---
 
@@ -111,41 +126,52 @@ During an active scan, press `BACK` to stop and display results.
 
 ```
 Main Menu
-├── 1. Wi-Fi Scan
-│   ├── Scan Networks
-│   └── Save Last Scan
+├── 1. WiFi Scan
+│   ├── Scan Networks       → select network → connect (or enter password)
+│   ├── Device Discovery    → ARP + port scan of connected subnet
+│   ├── Save Devices
+│   └── Disconnect
 ├── 2. BLE Scan
 │   ├── Scan Devices
+│   ├── Find Trackers
 │   └── Save Scan
-├── 3. RF Monitor
-│   ├── Spectrum View
-│   └── Save Log
-├── 4. Device Info
-│   ├── MAC Status
-│   └── Radio Status
-├── 5. SD Card
+├── 3. RF24 Tools
+│   ├── Spectrum Analyze
+│   ├── Capture Packets
+│   ├── Replay Packets
+│   └── Save Capture
+├── 4. Probe Sniff
+│   ├── Start Sniffing
+│   ├── Stop Sniffing
+│   └── Save Probes
+├── 5. Device Spoof
+│   ├── Create Profile
+│   ├── Activate Profile
+│   └── Delete Profile
+├── 6. SD Card
 │   ├── Browse Files
 │   ├── Card Info
 │   └── Delete File
-└── 6. Status
+└── 7. Status
 ```
 
 ---
 
 ## Boot Sequence
 
-On power-up, the device initializes peripherals in order:
+On power-up, the device initializes peripherals in order, showing progress on the OLED:
 
-1. OLED display
+1. BLE stack
 2. NRF24L01+ radio
 3. SD card + directory tree
-4. MAC randomization
-5. Wi-Fi (enabled only when a scan is requested)
+4. Wi-Fi MAC randomization (radio is left off afterward)
+5. Stored device-spoof profiles, loaded from SD
 
-Radios are kept off when idle. This reduces unnecessary broadcasts and
-extends battery life — it does not make the device undetectable. Any
-active transmission, from Black Void or any other device, remains
-observable to anyone listening on the same spectrum.
+Wi-Fi is only brought up when a scan, connect, or discovery action is
+requested. Radios kept off when idle reduce unnecessary broadcasts and extend
+battery life — this does not make the device undetectable. Any active
+transmission, from Black Void or any other device, remains observable to
+anyone listening on the same spectrum.
 
 ---
 
@@ -168,7 +194,7 @@ Black Void is built around a few fixed constraints:
 
 This project is intended for **authorized security research, educational use, and testing on networks and devices you own or have explicit permission to test.**
 
-Unauthorized interception of wireless communications or unauthorized access to computer networks may violate local laws, including (but not limited to) the Computer Fraud and Abuse Act (US), the Computer Misuse Act (UK), and equivalent legislation in other jurisdictions.
+Several features on this device — including LAN device/port discovery, RF packet capture and replay, and 802.11 probe request sniffing — can be misused against networks or devices you do not own or lack permission to test. Depending on your jurisdiction, unauthorized use of these features may violate laws such as the Computer Fraud and Abuse Act (US), the Computer Misuse Act (UK), or equivalent local legislation, and may also implicate wireless-interception or radio-equipment regulations.
 
 Use responsibly. The authors assume no liability for misuse.
 
